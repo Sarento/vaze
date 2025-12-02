@@ -1,50 +1,133 @@
 <!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <title>Vase</title>
-  <style>
-    body,html { margin:0; height:100%; overflow:hidden; }
-    canvas { display:block; }
-  </style>
+  <meta charset="utf-8" />
+  <title>3D Vase — Bezier + Lathe (Three.js)</title>
+  <style>html,body{height:100%;margin:0;background:#111}canvas{display:block}</style>
 </head>
 <body>
-
 <script type="module">
+  // Импорты соответствуют структуре репозитория three.js (модульная сборка + examples/jsm)
   import * as THREE from "./build/three.module.js";
   import { OrbitControls } from "./examples/jsm/controls/OrbitControls.js";
 
-  console.log("Three.js загружен:", THREE.REVISION);
-
+  // Сцена/рендер/камера
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x111111);
+  scene.background = new THREE.Color(0x0f0f12);
 
   const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
-  camera.position.set(0, 20, 45);
+  camera.position.set(0, 18, 48);
 
-  const renderer = new THREE.WebGLRenderer({ antialias:true });
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(innerWidth, innerHeight);
   document.body.appendChild(renderer.domElement);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
+  controls.target.set(0, 6, 0);
 
-  // простой объект
-  const geom = new THREE.BoxGeometry(10, 10, 10);
-  const mat  = new THREE.MeshNormalMaterial();
-  const box  = new THREE.Mesh(geom, mat);
-  scene.add(box);
+  // --- профиль вазы: комбинация кубических кривых Безье ---
+  // Используем THREE.CubicBezierCurve (Vector2), затем получаем точки и LatheGeometry
+  const path = new THREE.CurvePath();
 
-  function animate(){
+  path.add(new THREE.CubicBezierCurve(
+    new THREE.Vector2(4.5, 30),   // start: левый край рима (x - радиус от оси)
+    new THREE.Vector2(6.5, 32),
+    new THREE.Vector2(9.5, 33),
+    new THREE.Vector2(11.5, 30)   // край рима вправо
+  ));
+
+  path.add(new THREE.CubicBezierCurve(
+    new THREE.Vector2(11.5, 30),
+    new THREE.Vector2(13, 25),
+    new THREE.Vector2(13, 20),
+    new THREE.Vector2(9.5, 15)
+  ));
+
+  path.add(new THREE.CubicBezierCurve(
+    new THREE.Vector2(9.5, 15),
+    new THREE.Vector2(17, 12),
+    new THREE.Vector2(22, 5),
+    new THREE.Vector2(20, 0)
+  ));
+
+  path.add(new THREE.CubicBezierCurve(
+    new THREE.Vector2(20, 0),
+    new THREE.Vector2(18, -5),
+    new THREE.Vector2(10, -8),
+    new THREE.Vector2(6, -10)
+  ));
+
+  path.add(new THREE.CubicBezierCurve(
+    new THREE.Vector2(6, -10),
+    new THREE.Vector2(4, -11),
+    new THREE.Vector2(2, -12),
+    new THREE.Vector2(0, -12)
+  ));
+
+  const pts = path.getPoints(120); // точность профиля
+  // LatheGeometry ожидает массив Vector2, уже OK
+
+  const segments = 160;
+  const geometry = new THREE.LatheGeometry(pts, segments);
+  geometry.computeVertexNormals();
+
+  // Материал — керамика/глазурь
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x7b3ef0,
+    roughness: 0.28,
+    metalness: 0.05,
+    side: THREE.DoubleSide
+  });
+
+  const vase = new THREE.Mesh(geometry, material);
+  vase.position.y = 6; // поднять так, чтобы центр был ниже
+  scene.add(vase);
+
+  // Подложка (пол)
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 1, metalness: 0 })
+  );
+  plane.rotation.x = -Math.PI/2;
+  plane.position.y = -12;
+  scene.add(plane);
+
+  // Освещение: ambient + directional + rim
+  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(30, 50, 20);
+  scene.add(dir);
+
+  const rim = new THREE.DirectionalLight(0xffffff, 0.15);
+  rim.position.set(-20, 10, -30);
+  scene.add(rim);
+
+  // Небольшой легкий блик через дополнительную лампу
+  const spot = new THREE.PointLight(0xfff7ff, 0.25, 200);
+  spot.position.set(6, 18, 18);
+  scene.add(spot);
+
+  // Анимация
+  function animate(t){
     requestAnimationFrame(animate);
-    box.rotation.y += 0.01;
+    vase.rotation.y += 0.0025;
     controls.update();
     renderer.render(scene, camera);
   }
-
   animate();
-</script>
 
+  // Resize
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+</script>
 </body>
 </html>
+
+
 
